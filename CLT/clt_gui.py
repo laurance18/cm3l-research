@@ -26,6 +26,7 @@ from tkinter import ttk, messagebox
 from typing import List, Tuple
 
 import numpy as np
+import tkinter.font as tkfont  # Added for custom fonts and styling
 
 # --------------------------
 # CLT CORE IMPLEMENTATION
@@ -161,6 +162,12 @@ class LaminationGUI(tk.Tk):
         self.style.theme_use("clam")
         self.geometry("1000x600")
 
+        # ----- Custom fonts & styles -----
+        self.font_mono = tkfont.Font(family="Consolas", size=10)
+        self.style.configure("Treeview.Heading", font=("Helvetica", 10, "bold"))
+        self.style.configure("Treeview", rowheight=22)
+        self.style.configure("TButton", padding=6)
+
         self.plies: List[dict[str, tk.Variable]] = []  # store tk variables for each ply
 
         self._create_widgets()
@@ -188,17 +195,37 @@ class LaminationGUI(tk.Tk):
         spn = ttk.Spinbox(frm_n, from_=1, to=50, width=5, textvariable=self.var_nplies, command=self._update_plies)
         spn.pack(side=tk.LEFT, padx=5)
 
-        # Ply table
+        # Ply table with scrollbars
+        self.tbl_frame = ttk.Frame(self.frm_inputs)
+        self.tbl_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        scroll_y = ttk.Scrollbar(self.tbl_frame, orient=tk.VERTICAL)
+        scroll_x = ttk.Scrollbar(self.tbl_frame, orient=tk.HORIZONTAL)
+
         self.tbl = ttk.Treeview(
-            self.frm_inputs,
+            self.tbl_frame,
             columns=("E1", "E2", "G12", "v12", "t", "theta"),
             show="headings",
+            yscrollcommand=scroll_y.set,
+            xscrollcommand=scroll_x.set,
             height=15,
         )
+        scroll_y.config(command=self.tbl.yview)
+        scroll_x.config(command=self.tbl.xview)
+
         for col in self.tbl["columns"]:
             self.tbl.heading(col, text=col)
             self.tbl.column(col, width=80, anchor=tk.CENTER)
-        self.tbl.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        self.tbl.grid(row=0, column=0, sticky="nsew")
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        self.tbl_frame.rowconfigure(0, weight=1)
+        self.tbl_frame.columnconfigure(0, weight=1)
+
+        # Alternate row colours
+        self.tbl.tag_configure("oddrow", background="#f2f2f7")
+        self.tbl.tag_configure("evenrow", background="#ffffff")
 
         # Edit selected row button
         btn_edit = ttk.Button(self.frm_inputs, text="Edit Selected Ply", command=self._edit_selected_ply)
@@ -216,8 +243,28 @@ class LaminationGUI(tk.Tk):
         ttk.Button(self.frm_inputs, text="Compute", command=self._compute).pack(pady=8)
 
         # -------- Results Side --------
-        self.txt_res = tk.Text(self.frm_results, wrap=tk.NONE, state=tk.DISABLED)
-        self.txt_res.pack(fill=tk.BOTH, expand=True)
+        self.txt_frame = ttk.Frame(self.frm_results)
+        self.txt_frame.pack(fill=tk.BOTH, expand=True)
+
+        txt_scroll_y = ttk.Scrollbar(self.txt_frame, orient=tk.VERTICAL)
+        txt_scroll_x = ttk.Scrollbar(self.txt_frame, orient=tk.HORIZONTAL)
+
+        self.txt_res = tk.Text(
+            self.txt_frame,
+            wrap=tk.NONE,
+            state=tk.DISABLED,
+            yscrollcommand=txt_scroll_y.set,
+            xscrollcommand=txt_scroll_x.set,
+            font=self.font_mono,
+        )
+        txt_scroll_y.config(command=self.txt_res.yview)
+        txt_scroll_x.config(command=self.txt_res.xview)
+
+        self.txt_res.grid(row=0, column=0, sticky="nsew")
+        txt_scroll_y.grid(row=0, column=1, sticky="ns")
+        txt_scroll_x.grid(row=1, column=0, sticky="ew")
+        self.txt_frame.rowconfigure(0, weight=1)
+        self.txt_frame.columnconfigure(0, weight=1)
 
         self._update_plies()
 
@@ -238,7 +285,8 @@ class LaminationGUI(tk.Tk):
             self.tbl.delete(row)
         for i, vars_ in enumerate(self.plies, start=1):
             values = [f"{vars_[c].get():.3g}" if c != "theta" else f"{vars_[c].get():.1f}" for c in self.tbl["columns"]]
-            self.tbl.insert("", tk.END, iid=str(i - 1), values=values)
+            tag = "evenrow" if i % 2 == 0 else "oddrow"
+            self.tbl.insert("", tk.END, iid=str(i - 1), values=values, tags=(tag,))
 
     def _edit_selected_ply(self) -> None:
         sel = self.tbl.focus()
